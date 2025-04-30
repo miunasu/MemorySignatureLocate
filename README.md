@@ -47,7 +47,7 @@ This project is currently in its early stages, and we hope you will give us your
  
 # Example
 Use MSF to generate shellcode for testing.  
-使用MSF生成shellcode的进行测试。  
+使用MSF生成shellcode进行测试。  
 ```
 C:\Users\username\Desktop>python Signature_Locate.py shellcode.bin.enc
 --------------------------------------------
