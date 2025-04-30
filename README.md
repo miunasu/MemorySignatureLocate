@@ -1,4 +1,4 @@
-# Signature_Code_Locate
+# Signature Locate
 Inject malicious code into Notepad and use antivirus software memory scanning to automatically locate memory signature codes.  
 向notepad注入恶意代码，利用杀软进行内存扫描自动化定位内存特征码。  
 It is recommended to locate the signature of shellcode.   
