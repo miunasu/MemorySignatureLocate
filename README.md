@@ -40,8 +40,8 @@ Encrypt the memory anti-virus code and output it to output_shellcode.bin, and de
 # Other
 The larger the target is, the more time it takes.  
 免杀目标越大，消耗的时间越多。  
-In the case of heuristic scanning (for example, the entropy value is too high), this tool is currently unable to locate the signature code.  
-被启发式扫描查杀(比如熵值过高)的情况，该工具目前无法定位特征码。  
+In some special cases, the tool cannot correctly locate the signature.  
+在个别特殊情况，工具无法正确定位特征码。    
 This project is currently in its early stages, and we hope you will give us your comments and suggestions.  
 该项目目前处于早期版本，希望大家多多提意见和建议。  
  
