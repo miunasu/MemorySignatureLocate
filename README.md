@@ -20,7 +20,7 @@ then ```python Signature_Locate.py file.enc```
 
 # Anti-virus products
 Currently only compatible with Kaspersky, you can modify the scan command to adapt to the target antivirus software.   
-当前仅适配卡巴斯基，你可以通过的修改扫描指令来适配目标杀软。  
+当前仅适配卡巴斯基，你可以通过修改扫描指令来适配目标杀软。  
 
 ![](./picture/anti_virus_cmd.png)  
 
