@@ -2,7 +2,9 @@ import os
 import sys
 import subprocess
 import inject
-
+from threading import Event
+import threading
+import time
 # anti-virus scan
 kaspersky = ""
 
@@ -27,13 +29,27 @@ INJECT_NUM = 15
 
 SINGLE_LONGEST_SIGNATURE = 40
 
+multiple_scan = False # both forward scan and backward scan
+precise_locate_single_signature = True  # when detect single signature, start precise locate
+signature_handle_method = "ZERO" # ZERO OR XOR
+padding_method = "ZERO" # ZERO OR XOR
+
+# syn
+scan_read = False 
+scan_flag = Event()
+scan_barrier = threading.Barrier(2)
+lock = threading.Lock()
+
 # signature info
 signature_info = []
-
+reverse_scan_signature_info = []
 shellcode = b""
-backup_shellcode = b""
+reverse_scan_shellcode = b""
+
+
 def xor_decrypt(data):
     return bytes(byte ^ enc_key for byte in data)
+
 
 def anti_virus_search():
     global kaspersky
@@ -41,33 +57,125 @@ def anti_virus_search():
         process = subprocess.Popen("cmd /C where avp.com", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         stdout, stderr = process.communicate()
         if process.returncode != 0:
-            print(f"Command stderr: {stderr} ")
-            exit(1)
+            print(f"Command stderr: {stderr.decode("GBK")}")
+            #print(f"Command stderr: {stderr.decode("utf-8")} ")
+            thread_exit()
         else:
             kaspersky = stdout[:-2].decode('utf-8')
     except Exception as e:
-        return f"Error while executing command: {str(e)}"
+        print(f"Error while executing search: {str(e)}")
+        thread_exit()
     
-def iterate_process(start, end):
+    
+def shellcode_padding(pos, reverse=False):
+    global reverse_scan_shellcode
+    if padding_method == "XOR":
+        if reverse == True:
+            return bytes([byte ^ enc_key for byte in reverse_scan_shellcode[:pos]])
+        else:
+            return bytes([byte ^ enc_key for byte in shellcode[pos:]])
+    elif padding_method == "ZERO":
+        if reverse == True:
+            return bytes([0 for byte in reverse_scan_shellcode[:pos]])
+        else:
+            return bytes([0 for byte in shellcode[pos:]])
+    else:
+        print(f'Unknown padding method: {padding_method}, please choose ZERO or XOR')
+        thread_exit()
+
+
+def signature_handle(pos1, pos2, reverse):
+    global shellcode
+    global reverse_scan_shellcode
+    
+    if reverse == False:
+        temp_shellcode = shellcode[:]
+        word = "bakcward"
+    else:
+        temp_shellcode = reverse_scan_shellcode[:]
+        word = "forward"
+
+    if signature_handle_method == "ZERO":
+        temp_shellcode = temp_shellcode[:pos1] +  bytes([ 0 for byte in temp_shellcode[pos1: pos2]]) + temp_shellcode[pos2:]
+        print(
+            f'--------------------------------------------\n'
+            f'find signature in {word} scan, ZERO range start: {pos1}, end: {pos2}'
+            )
+    elif signature_handle_method == "XOR":
+    
+        temp_shellcode = temp_shellcode[:pos1] +  bytes([byte ^ enc_key for byte in temp_shellcode[pos1: pos2]]) + temp_shellcode[pos2:]
+        print(
+            f'--------------------------------------------\n'
+            f'Find signature in {word} scan, byte XOR key range start: {pos1}, end: {pos2}'
+            )
+    else:
+        print(f'Unknown signature handle method: {signature_handle_method}, please choose ZERO or XOR')
+        thread_exit()
+    
+    if reverse == True:
+        reverse_scan_shellcode = temp_shellcode[:]
+    else:  
+        shellcode = temp_shellcode[:]
+
+    return
+
+
+def sync_scan():
+    global scan_read
+    global multiple_scan
+    if multiple_scan == True:
+        with lock:
+            temp = scan_read
+            if scan_read == False:
+                scan_read = True
+        try:
+            if temp == False:
+                scan_barrier.wait()
+                scan_flag.clear()
+                scan_flag.wait()
+                scan_read = False
+            else:
+                scan_barrier.wait()
+                scan()
+                scan_flag.set()
+        except threading.BrokenBarrierError:
+            multiple_scan = False
+            scan()
+    else:
+        scan()
+
+
+def thread_exit():
+    global multiple_scan
+    if multiple_scan == True:
+        multiple_scan = False
+        scan_barrier.abort()
+    exit(0)
+
+
+def iterate_process(start, end, sig_locate=False):
     pid = []
     pos = 0
     pre_pos = -1
     i = 0
-    print(f'--------------------------------------------')
-    print(f'iterate_process, start position: {start}, end position: {end}')
-    if SIGNATURE_CHUNCK * INJECT_NUM <= end - start:
-        chunk_size = (end - start) // INJECT_NUM
+    global signature_info
+    global shellcode
+    if sig_locate == False:
+        if SIGNATURE_CHUNCK * INJECT_NUM <= end - start:
+            chunk_size = (end - start) // INJECT_NUM
+        else:
+            chunk_size = SIGNATURE_CHUNCK
     else:
-        chunk_size = SIGNATURE_CHUNCK
+        chunk_size = STEP
 
     while True:
         i += 1
         pos = min(start + i * chunk_size, end)
-        pid.append([inject_shellcode(shellcode[: pos]), pos])
+        pid.append([inject_shellcode(shellcode[: pos] + shellcode_padding(pos)), pos])
         if pos == end:
             break
-
-    scan()
+    
+    sync_scan()
 
     for i in range(len(pid)):
         if inject.is_pid_running(pid[i][0]) == False:
@@ -79,69 +187,121 @@ def iterate_process(start, end):
                     pre_pos = start
         else:
             kill_process(pid[i][0])
-    
-    print(f'chunk size: {chunk_size}, pre_pos: {pre_pos}, pos: {pos}')
+    # pre_pos < pos
+
     if pre_pos == -1:
-        print(f'something is wrong, current work space: {start}, pre_pos: {end}')
-        exit(1)
+        print(f'something is wrong in forward scan, current work space: {start} - {end}')
+        thread_exit()
 
     if chunk_size == SIGNATURE_CHUNCK:
-        locate(pre_pos, pos)
+        iterate_process(pre_pos, pos, True)
+    elif chunk_size == STEP:
+
+        if precise_locate_single_signature == True:
+            temp_pos = max(start, pos - SIGNATURE_CHUNCK - STEP)
+            pid = inject_shellcode(shellcode[temp_pos: pos])
+            sync_scan()
+            if inject.is_pid_running(pid) == False:
+                pre_pos, pos = single_locate(temp_pos, pos, shellcode)
+            else:
+                kill_process(pid)
         
+        if [pre_pos, pos] in signature_info:
+            print(f'This range has been processed in forward scan, start: {pre_pos}, end: {pos}, try other signature and padding handle method')
+            thread_exit()
+        signature_info.append([pre_pos, pos])
+
+        signature_handle(pre_pos, pos, False)
+        return
+
     else:
+        print(
+            f'--------------------------------------------\n'
+            f'forward iterate process, start position: {start}, end position: {end}\n'
+            f'chunk size: {chunk_size}, pre_pos: {pre_pos}, pos: {pos}'
+            )
         iterate_process(pre_pos, pos)
 
 
-def locate(start, end):
-    global signature_info
-    global shellcode
-    head_inject_pid = {}
-    head_pos = 0
-    tail_pos = 0
-    # inject_pid = pos : pid
-    for i in range(start, end+1, STEP):
-            head_inject_pid[i] = inject_shellcode(shellcode[0: i])
-    if (end - start % STEP) != 0:
-            head_inject_pid[end] = inject_shellcode(shellcode[0: end])
-            
-    scan()
-
-    print(f'head scan, start position: {start}')
-    for pos, pid in head_inject_pid.items():
-        if inject.is_pid_running(pid) == False:
-            if tail_pos == 0:
-                tail_pos = pos
-                print(f'tail_pos: {tail_pos}')
-            # print(f'{pos} is dead')
+def reverse_iterate_process(start, end, sig_locate=False):
+    # start < end
+    pid = []
+    pos = 0
+    pre_pos = -1
+    i = 0
+    global reverse_scan_signature_info
+    global reverse_scan_shellcode
+    if sig_locate == False:
+        if SIGNATURE_CHUNCK * INJECT_NUM <= end - start:
+            chunk_size = (end - start) // INJECT_NUM
         else:
-            kill_process(pid)
-            # print(f'{pos} is alive')
-
-
-    pid = inject_shellcode(shellcode[tail_pos - SIGNATURE_CHUNCK - STEP: tail_pos])
-    scan()
-    if inject.is_pid_running(pid) == False:
-        print("detect single signature")
-        head_pos, tail_pos = single_locate(tail_pos - SINGLE_LONGEST_SIGNATURE - STEP, tail_pos)
+            chunk_size = SIGNATURE_CHUNCK
     else:
-        head_pos = tail_pos - STEP
-        kill_process(pid)
+        chunk_size = STEP
 
-    if [head_pos, tail_pos] in signature_info:
-        print(f'This range has been ZERO, start: {head_pos}, end: {tail_pos}, maybe file entropy too high')
-        exit(1)
-    signature_info.append([head_pos, tail_pos])
-    shellcode = shellcode[:head_pos] +  b"\x00" * (tail_pos - head_pos) + shellcode[tail_pos:]
-    print(f'find signature, ZERO range start: {head_pos}, end: {tail_pos}')
-    return 
+    while True:
+        i += 1
+        pos = max(end - i * chunk_size, start)
+        pid.append([inject_shellcode(shellcode_padding(pos, True) + reverse_scan_shellcode[pos:]), pos])
+        if pos == start:
+            break
+    
+    sync_scan()
+
+    for i in range(len(pid)):
+        if inject.is_pid_running(pid[i][0]) == False:
+            if pre_pos == -1:
+                pos = pid[i][1]
+                if i != 0:
+                    pre_pos = pid[i-1][1]
+                else:
+                    pre_pos = end
+        else:
+            kill_process(pid[i][0])
+    # pos < pre_pos
+
+    if pre_pos == -1:
+        print(f'something is wrong in backward scan, current work space: {start} - {end}')
+        thread_exit()
+
+    if chunk_size == SIGNATURE_CHUNCK:
+        reverse_iterate_process(pos, pre_pos, True)
+    elif chunk_size == STEP:
+
+        if precise_locate_single_signature == True:
+            temp_pos = min(end, pos + SIGNATURE_CHUNCK + STEP)
+            pid = inject_shellcode(reverse_scan_shellcode[pos : temp_pos])
+            sync_scan()
+            if inject.is_pid_running(pid) == False:
+                
+                pos, pre_pos = single_locate(pos, temp_pos, reverse_scan_shellcode)
+            else:
+                kill_process(pid)
+        
+        if [pos, pre_pos] in reverse_scan_signature_info:
+            print(f'This range has been processed in backward scan, start: {pos}, end: {pre_pos}, try other signature and padding handle method')
+            thread_exit()
+        reverse_scan_signature_info.append([pos, pre_pos])
+
+        signature_handle(pos, pre_pos, True) 
+        return
+
+    else:
+        print(
+            f'--------------------------------------------\n'
+            f'backward iterate process, start position: {start}, end position: {end}\n'
+            f'chunk size: {chunk_size}, pos: {pos}, pre_pos: {pre_pos}'
+            )
+        reverse_iterate_process(pos, pre_pos)
 
 
-def single_locate(start, end):
+def single_locate(start, end, shellcode):
     head_inject_pid = {}
     tail_inject_pid = {}
     tail_pos = 0
     head_pos = 0
     # inject_pid = pos : pid
+
     for i in range(start, end+1, STEP):
             if i == start:
                 continue
@@ -157,14 +317,14 @@ def single_locate(start, end):
     if (end - start % STEP) != 0:
         tail_inject_pid[start] = inject_shellcode(shellcode[start: end])
 
-    scan()
+    sync_scan()
 
-    print(f'head scan, start position: {start}')
+    # print(f'head scan, start position: {start}')
     for pos, pid in head_inject_pid.items():
         if inject.is_pid_running(pid) == False:
             if tail_pos == 0:
                 tail_pos = pos
-                print(f'tail_pos: {tail_pos}')
+                # print(f'tail_pos: {tail_pos}')
             # print(f'{pos} is dead')
 
         else:
@@ -172,12 +332,12 @@ def single_locate(start, end):
             # print(f'{pos} is alive')
 
 
-    print(f'tail scan, start position: {end}')
+    # print(f'tail scan, start position: {end}')
     for pos, pid in tail_inject_pid.items():
         if inject.is_pid_running(pid) == False:
             if head_pos == 0:
                 head_pos = pos
-                print(f'head_pos: {head_pos}')
+                # print(f'head_pos: {head_pos}')
             # print(f'{pos} is dead')
 
         else:
@@ -187,7 +347,12 @@ def single_locate(start, end):
     if head_pos > tail_pos:
         print(f'there has multiple singles signature in {start} - {end}')
         return tail_pos, head_pos
-    
+    print(
+        f'--------------------------------------------\n'
+        f"detect single signature in backward scan, start precise location\n"
+        f'precise location result:\n'
+        f'head_pos: {head_pos}, tail_pos: {tail_pos}'
+    )
     return head_pos, tail_pos
 
 
@@ -196,14 +361,15 @@ def scan():
         subprocess.run(["cmd", "/C", kaspersky, "SCAN", "/MEMORY", "/i1"], capture_output=True)
         # print('Finish scan')
     except Exception as e:
-        return f"Error while executing command: {str(e)}"
+        print(f"Error while executing scan: {str(e)}")
+        thread_exit()
 
 
 def inject_shellcode(code):
     success, injected_address, injected_pid = inject.inject_shellcode(code)
     if success != True:
-        print("Error: Failed to inject shellcode")
-        exit(1)
+        print("Failed to inject shellcode")
+        thread_exit()
     return injected_pid
 
 
@@ -214,8 +380,37 @@ def kill_process(pid):
         print(f"Failed to terminate process {pid}: {e}")
 
 
+def forward_scan_thread():
+    global multiple_scan
+    pid = inject_shellcode(shellcode)
+    sync_scan()
+    while inject.is_pid_running(pid) != True:
+        length = len(shellcode)
+        iterate_process(0, length)
+        pid = inject_shellcode(shellcode)
+        sync_scan()
+    
+    kill_process(pid)
+    multiple_scan = False
+    scan_barrier.abort()
+
+def backward_scan_thread():
+    global multiple_scan
+    pid = inject_shellcode(reverse_scan_shellcode)
+    sync_scan()
+    while inject.is_pid_running(pid) != True:
+        length = len(reverse_scan_shellcode)
+        reverse_iterate_process(0, length)
+        pid = inject_shellcode(reverse_scan_shellcode)
+        sync_scan()
+    
+    kill_process(pid)
+    multiple_scan = False
+    scan_barrier.abort()
+
 def main():
     global shellcode
+    global reverse_scan_shellcode
     if len(sys.argv) != 2:
         print("Usage: python Signature_Code_Locate.py <file.enc>")
 
@@ -228,27 +423,44 @@ def main():
         return
     shellcode = xor_decrypt(encrypted_shellcode)
     anti_virus_search()
-    
-    pid = inject_shellcode(shellcode)
-    scan()
-    while inject.is_pid_running(pid) != True:
-        length = len(shellcode)
-        iterate_process(0, length)
-        pid = inject_shellcode(shellcode)
-        scan()
-    
-    kill_process(pid)
+
+    if multiple_scan == True:
+        reverse_scan_shellcode = shellcode[:]
+        forward_thread = threading.Thread(target=forward_scan_thread)
+        backward_thread = threading.Thread(target=backward_scan_thread)
+        forward_thread.start()
+        backward_thread.start()
+        forward_thread.join()
+        backward_thread.join()
+
+    else:
+        forward_scan_thread()
+            
     # Write the shellcode to a local file
-    output_file = "output_shellcode.bin"
+    if reverse_scan_shellcode != b"":
+        output_file = "output_backward_scan_shellcode.bin"
+        reverse_scan_shellcode = xor_decrypt(reverse_scan_shellcode)
+        try:
+            with open(output_file, "wb") as f:
+                f.write(reverse_scan_shellcode)
+            print(f"Shellcode written to {output_file}, decryption key: 0x{hex(enc_key)}")
+        except Exception as e:
+            print(f"Failed to write shellcode to file: {e}")
+        print("Backward signature locate finished, result:")
+        print(reverse_scan_signature_info)       
+        
+
+    output_file = "output_forward_scan_shellcode.bin"
     shellcode = xor_decrypt(shellcode)
     try:
         with open(output_file, "wb") as f:
             f.write(shellcode)
-        print(f"Shellcode written to {output_file}, decryption key: {enc_key}")
+        print(f"Shellcode written to {output_file}, decryption key: 0x{hex(enc_key)}")
     except Exception as e:
         print(f"Failed to write shellcode to file: {e}")
-    print("Signature locate finished, result:")
+    print("Forward signature locate finished, result:")
     print(signature_info)
+
     
 if __name__ == "__main__":
     main()

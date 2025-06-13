@@ -4,12 +4,30 @@ Inject malicious code into Notepad and use antivirus software memory scanning to
 It is recommended to locate the signature of shellcode.   
 推荐对shellcode进行特征码定位。  
  
+
+# Update
+
+## 2025.6.13
+1. Added bidirectional scanning function/增加双向扫描功能
+2. Improved locate logic/改进定位逻辑
+
 # Config
 The injection module of this project comes from my friend's [Memccl](https://github.com/Adnnlnistrator/Memccl), so inject.py needs to be in the same directory as Signature_Locate.py.  
 该项目注入模块来自朋友的[Memccl](https://github.com/Adnnlnistrator/Memccl)，因此inject.py需要和Signature_Locate.py处于同一目录。  
 
 You need to set the relevant parameters manually.  
 你需要手动设定相关参数。  
+
+Choose signature and padding method.  
+选择特征码和填充的处理方式。  
+
+You can turn off the function you don't need by set it's False.  
+你可以通过将不需要的功能设置为 False 来关闭它。  
+multiple scan has both forward scan and backward scan, But it will increase the scanning time。Bidirectional scanning is not recommended for processing PE files.  
+多重扫描可以同时向前和向后扫描，它会增加扫描时间。在处理PE文件特征码的时候不推荐使用双向扫描。  
+precise locate single signature means when detect single signature, start precise locate.  
+单特征码精准定位可以在检测到单特征码的时候进行精准定位。  
+
 
 ![](./picture/config.png)
 
@@ -20,7 +38,7 @@ then ```python Signature_Locate.py file.enc```
 
 # Anti-virus products
 Currently only compatible with Kaspersky, you can modify the scan command to adapt to the target antivirus software.   
-当前仅适配卡巴斯基，你可以通过修改扫描指令来适配目标杀软。  
+当前仅适配卡巴斯基，你可以通过的修改扫描指令来适配目标杀软。  
 
 ![](./picture/anti_virus_cmd.png)  
 
@@ -32,8 +50,10 @@ Kaspersky need turn Advanced cleaning technology off.
 # Output
 For single-signature matching items, the specific position is matched and the error is one STEP.  
 对于单特征码匹配项，匹配具体位置，误差为一个STEP。  
-For multi-feature code matching items, only one of the multiple features needs to be eliminated, so only the position of the STEP length of one of the features will be provided.  
+For multi-signature code matching items, only one of the multiple signature needs to be eliminated, so only the position of the STEP length of one of the signature will be provided.  
 对于多特征码匹配项，只需消除多特征中的一项即可，因此只会提供其中一项STEP长度的位置。  
+Bidirectional scanning will provide separate results and file. The final signature code requires comprehensive judgment.  
+双向扫描会提供各自的结果和文件，最终特征码需要进行综合判断。  
 Encrypt the memory anti-virus code and output it to output_shellcode.bin, and decrypt it using enc.py.  
 将内存免杀的代码加密并输出到output_shellcode.bin，使用enc.py解密。  
 
@@ -42,12 +62,17 @@ The larger the target is, the more time it takes.
 免杀目标越大，消耗的时间越多。  
 In some special cases, the tool cannot correctly locate the signature.  
 在个别特殊情况，工具无法正确定位特征码。    
-This project is currently in its early stages, looking forward to your comments and suggestions.  
-该项目目前处于早期版本，期待你的意见和建议。  
- 
+This project is currently in its early stages, and we hope you will give us your comments and suggestions.  
+该项目目前处于早期版本，希望大家多多提意见和建议。 
+
+Sometime, you need choose different method.  
+有时，你需要选择不同的处理方式。  
+
+
+
 # Example
-Use MSF to generate shellcode for testing.  
-使用MSF生成shellcode进行测试。  
+Use MSF to generate shellcode for forward scan testing.  
+使用MSF生成shellcode进行向前扫描测试。  
 ```
 C:\Users\username\Desktop>python Signature_Locate.py shellcode.bin.enc
 --------------------------------------------
