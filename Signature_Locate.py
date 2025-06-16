@@ -29,10 +29,10 @@ INJECT_NUM = 15
 
 SINGLE_LONGEST_SIGNATURE = 40
 
-multiple_scan = False # both forward scan and backward scan
+multiple_scan = True # both forward scan and backward scan
 precise_locate_single_signature = True  # when detect single signature, start precise locate
 signature_handle_method = "ZERO" # ZERO OR XOR
-padding_method = "ZERO" # ZERO OR XOR
+padding_method = "XOR" # ZERO OR XOR
 
 # syn
 scan_read = False 
@@ -45,7 +45,7 @@ signature_info = []
 reverse_scan_signature_info = []
 shellcode = b""
 reverse_scan_shellcode = b""
-
+PE_head = b""
 
 def xor_decrypt(data):
     return bytes(byte ^ enc_key for byte in data)
@@ -90,23 +90,23 @@ def signature_handle(pos1, pos2, reverse):
     
     if reverse == False:
         temp_shellcode = shellcode[:]
-        word = "bakcward"
+        word = "forward"
     else:
         temp_shellcode = reverse_scan_shellcode[:]
-        word = "forward"
+        word = "bakcward"
 
     if signature_handle_method == "ZERO":
         temp_shellcode = temp_shellcode[:pos1] +  bytes([ 0 for byte in temp_shellcode[pos1: pos2]]) + temp_shellcode[pos2:]
         print(
             f'--------------------------------------------\n'
-            f'find signature in {word} scan, ZERO range start: {pos1}, end: {pos2}'
+            f'find signature in {word} scan, ZERO range start: {pos1}, end: {pos2}\n'
             )
     elif signature_handle_method == "XOR":
     
         temp_shellcode = temp_shellcode[:pos1] +  bytes([byte ^ enc_key for byte in temp_shellcode[pos1: pos2]]) + temp_shellcode[pos2:]
         print(
             f'--------------------------------------------\n'
-            f'Find signature in {word} scan, byte XOR key range start: {pos1}, end: {pos2}'
+            f'Find signature in {word} scan, byte XOR key range start: {pos1}, end: {pos2}\n'
             )
     else:
         print(f'Unknown signature handle method: {signature_handle_method}, please choose ZERO or XOR')
@@ -198,7 +198,7 @@ def iterate_process(start, end, sig_locate=False):
     elif chunk_size == STEP:
 
         if precise_locate_single_signature == True:
-            temp_pos = max(start, pos - SIGNATURE_CHUNCK - STEP)
+            temp_pos = max(start, pos - SIGNATURE_CHUNCK - SINGLE_LONGEST_SIGNATURE)
             pid = inject_shellcode(shellcode[temp_pos: pos])
             sync_scan()
             if inject.is_pid_running(pid) == False:
@@ -207,7 +207,7 @@ def iterate_process(start, end, sig_locate=False):
                 kill_process(pid)
         
         if [pre_pos, pos] in signature_info:
-            print(f'This range has been processed in forward scan, start: {pre_pos}, end: {pos}, try other signature and padding handle method')
+            print(f'This range has been processed in forward scan, start: {pre_pos}, end: {pos}, try other signature or padding handle method')
             thread_exit()
         signature_info.append([pre_pos, pos])
 
@@ -218,7 +218,7 @@ def iterate_process(start, end, sig_locate=False):
         print(
             f'--------------------------------------------\n'
             f'forward iterate process, start position: {start}, end position: {end}\n'
-            f'chunk size: {chunk_size}, pre_pos: {pre_pos}, pos: {pos}'
+            f'chunk size: {chunk_size}, pre_pos: {pre_pos}, pos: {pos}\n'
             )
         iterate_process(pre_pos, pos)
 
@@ -242,7 +242,7 @@ def reverse_iterate_process(start, end, sig_locate=False):
     while True:
         i += 1
         pos = max(end - i * chunk_size, start)
-        pid.append([inject_shellcode(shellcode_padding(pos, True) + reverse_scan_shellcode[pos:]), pos])
+        pid.append([inject_shellcode(PE_head + shellcode_padding(pos, True) + reverse_scan_shellcode[pos:]), pos])
         if pos == start:
             break
     
@@ -269,17 +269,16 @@ def reverse_iterate_process(start, end, sig_locate=False):
     elif chunk_size == STEP:
 
         if precise_locate_single_signature == True:
-            temp_pos = min(end, pos + SIGNATURE_CHUNCK + STEP)
+            temp_pos = min(end, pos + SIGNATURE_CHUNCK + SINGLE_LONGEST_SIGNATURE)
             pid = inject_shellcode(reverse_scan_shellcode[pos : temp_pos])
             sync_scan()
             if inject.is_pid_running(pid) == False:
-                
                 pos, pre_pos = single_locate(pos, temp_pos, reverse_scan_shellcode)
             else:
                 kill_process(pid)
         
         if [pos, pre_pos] in reverse_scan_signature_info:
-            print(f'This range has been processed in backward scan, start: {pos}, end: {pre_pos}, try other signature and padding handle method')
+            print(f'This range has been processed in backward scan, start: {pos}, end: {pre_pos}, try other signature or padding handle method')
             thread_exit()
         reverse_scan_signature_info.append([pos, pre_pos])
 
@@ -290,7 +289,7 @@ def reverse_iterate_process(start, end, sig_locate=False):
         print(
             f'--------------------------------------------\n'
             f'backward iterate process, start position: {start}, end position: {end}\n'
-            f'chunk size: {chunk_size}, pos: {pos}, pre_pos: {pre_pos}'
+            f'chunk size: {chunk_size}, pos: {pos}, pre_pos: {pre_pos}\n'
             )
         reverse_iterate_process(pos, pre_pos)
 
@@ -349,9 +348,9 @@ def single_locate(start, end, shellcode):
         return tail_pos, head_pos
     print(
         f'--------------------------------------------\n'
-        f"detect single signature in backward scan, start precise location\n"
+        f"detect single signature, start precise location\n"
         f'precise location result:\n'
-        f'head_pos: {head_pos}, tail_pos: {tail_pos}'
+        f'head_pos: {head_pos}, tail_pos: {tail_pos}\n'
     )
     return head_pos, tail_pos
 
@@ -396,12 +395,22 @@ def forward_scan_thread():
 
 def backward_scan_thread():
     global multiple_scan
-    pid = inject_shellcode(reverse_scan_shellcode)
+    global PE_head
+    global reverse_scan_shellcode
+    # Check if shellcode is a PE file
+    lfanew_bytes = reverse_scan_shellcode[0x3c:0x3c+4]
+    lfanew = int.from_bytes(lfanew_bytes, byteorder='little')
+    if reverse_scan_shellcode[:2] == b'MZ' and reverse_scan_shellcode[lfanew:lfanew+2] == b'PE':
+        print("This is PE file")
+        PE_head = reverse_scan_shellcode[:0x400]
+        reverse_scan_shellcode = reverse_scan_shellcode[0x400:]
+
+    pid = inject_shellcode(PE_head + reverse_scan_shellcode)
     sync_scan()
     while inject.is_pid_running(pid) != True:
         length = len(reverse_scan_shellcode)
         reverse_iterate_process(0, length)
-        pid = inject_shellcode(reverse_scan_shellcode)
+        pid = inject_shellcode(PE_head + reverse_scan_shellcode)
         sync_scan()
     
     kill_process(pid)
@@ -438,24 +447,24 @@ def main():
             
     # Write the shellcode to a local file
     if reverse_scan_shellcode != b"":
-        output_file = "output_backward_scan_shellcode.bin"
-        reverse_scan_shellcode = xor_decrypt(reverse_scan_shellcode)
+        output_file = "output_backward_scan_shellcode.enc"
+        reverse_scan_shellcode = xor_decrypt(PE_head + reverse_scan_shellcode)
         try:
             with open(output_file, "wb") as f:
                 f.write(reverse_scan_shellcode)
-            print(f"Shellcode written to {output_file}, decryption key: 0x{hex(enc_key)}")
+            print(f"Shellcode written to {output_file}, decryption key: {hex(enc_key)}")
         except Exception as e:
             print(f"Failed to write shellcode to file: {e}")
         print("Backward signature locate finished, result:")
         print(reverse_scan_signature_info)       
         
 
-    output_file = "output_forward_scan_shellcode.bin"
+    output_file = "output_forward_scan_shellcode.enc"
     shellcode = xor_decrypt(shellcode)
     try:
         with open(output_file, "wb") as f:
             f.write(shellcode)
-        print(f"Shellcode written to {output_file}, decryption key: 0x{hex(enc_key)}")
+        print(f"Shellcode written to {output_file}, decryption key: {hex(enc_key)}")
     except Exception as e:
         print(f"Failed to write shellcode to file: {e}")
     print("Forward signature locate finished, result:")

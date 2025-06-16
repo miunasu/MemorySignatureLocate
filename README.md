@@ -23,8 +23,8 @@ Choose signature and padding method.
 
 You can turn off the function you don't need by set it's False.  
 你可以通过将不需要的功能设置为 False 来关闭它。  
-multiple scan has both forward scan and backward scan, But it will increase the scanning time。Bidirectional scanning is not recommended for processing PE files.  
-多重扫描可以同时向前和向后扫描，它会增加扫描时间。在处理PE文件特征码的时候不推荐使用双向扫描。  
+multiple scan has both forward scan and backward scan, But it will increase the scanning time。Poor performance when handling PE files.  
+多重扫描可以同时向前和向后扫描，它会增加扫描时间。在处理PE文件的时候表现不佳。  
 precise locate single signature means when detect single signature, start precise locate.  
 单特征码精准定位可以在检测到单特征码的时候进行精准定位。  
 
@@ -71,52 +71,59 @@ Sometime, you need choose different method.
 
 
 # Example
-Use MSF to generate shellcode for forward scan testing.  
-使用MSF生成shellcode进行向前扫描测试。  
+Use MSF to generate shellcode for bidirectional scanning testing.  
+使用MSF生成shellcode进行双向扫描测试。  
+> CONFIG  
+> multiple_scan = True # both forward scan and backward scan  
+> precise_locate_single_signature = True  # when detect single signature, start precise locate  
+> signature_handle_method = "ZERO" # ZERO OR XOR  
+> padding_method = "XOR" # ZERO OR XOR   
 ```
-C:\Users\username\Desktop>python Signature_Locate.py shellcode.bin.enc
+C:\Users\miunasu\Desktop>python Signature_Locate.py shellcode.bin.enc
 --------------------------------------------
-iterate_process, start position: 0, end position: 510
-chunk size: 40, pre_pos: 40, pos: 80
-head scan, start position: 40
-tail_pos: 64
-detect single signature
-head scan, start position: 22
-tail_pos: 64
-tail scan, start position: 64
-head_pos: 44
-find signature, ZERO range start: 44, end: 64
+find signature in bakcward scan, ZERO range start: 406, end: 408
+
 --------------------------------------------
-iterate_process, start position: 0, end position: 510
-chunk size: 40, pre_pos: 320, pos: 360
-head scan, start position: 320
-tail_pos: 334
-find signature, ZERO range start: 332, end: 334
+detect single signature, start precise location
+precise location result:
+head_pos: 44, tail_pos: 64
+
 --------------------------------------------
-iterate_process, start position: 0, end position: 510
-chunk size: 40, pre_pos: 360, pos: 400
-head scan, start position: 360
-tail_pos: 374
-find signature, ZERO range start: 372, end: 374
+find signature in forward scan, ZERO range start: 44, end: 64
+
 --------------------------------------------
-iterate_process, start position: 0, end position: 510
-chunk size: 40, pre_pos: 400, pos: 440
-head scan, start position: 400
-tail_pos: 410
-find signature, ZERO range start: 408, end: 410
+find signature in bakcward scan, ZERO range start: 276, end: 278
+
 --------------------------------------------
-iterate_process, start position: 0, end position: 510
-chunk size: 40, pre_pos: 400, pos: 440
-head scan, start position: 400
-tail_pos: 436
-find signature, ZERO range start: 434, end: 436
+find signature in forward scan, ZERO range start: 332, end: 334
+
 --------------------------------------------
-iterate_process, start position: 0, end position: 510
-chunk size: 40, pre_pos: 440, pos: 480
-head scan, start position: 440
-tail_pos: 474
-find signature, ZERO range start: 472, end: 474
-Shellcode written to output_shellcode.bin, decryption key: 67
-Signature locate finished, result:
+find signature in bakcward scan, ZERO range start: 260, end: 262
+
+--------------------------------------------
+find signature in forward scan, ZERO range start: 372, end: 374
+
+--------------------------------------------
+find signature in forward scan, ZERO range start: 408, end: 410
+
+--------------------------------------------
+detect single signature, start precise location
+precise location result:
+head_pos: 44, tail_pos: 64
+
+--------------------------------------------
+find signature in bakcward scan, ZERO range start: 44, end: 64
+
+--------------------------------------------
+find signature in forward scan, ZERO range start: 434, end: 436
+
+--------------------------------------------
+find signature in forward scan, ZERO range start: 472, end: 474
+
+Shellcode written to output_backward_scan_shellcode.enc, decryption key: 0x43
+Backward signature locate finished, result:
+[[406, 408], [276, 278], [260, 262], [44, 64]]
+Shellcode written to output_forward_scan_shellcode.enc, decryption key: 0x43
+Forward signature locate finished, result:
 [[44, 64], [332, 334], [372, 374], [408, 410], [434, 436], [472, 474]]
 ```
