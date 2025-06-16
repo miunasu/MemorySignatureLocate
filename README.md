@@ -38,7 +38,7 @@ then ```python Signature_Locate.py file.enc```
 
 # Anti-virus products
 Currently only compatible with Kaspersky, you can modify the scan command to adapt to the target antivirus software.   
-当前仅适配卡巴斯基，你可以通过的修改扫描指令来适配目标杀软。  
+当前仅适配卡巴斯基，你可以通过修改扫描指令来适配目标杀软。  
 
 ![](./picture/anti_virus_cmd.png)  
 
@@ -62,8 +62,8 @@ The larger the target is, the more time it takes.
 免杀目标越大，消耗的时间越多。  
 In some special cases, the tool cannot correctly locate the signature.  
 在个别特殊情况，工具无法正确定位特征码。    
-This project is currently in its early stages, and we hope you will give us your comments and suggestions.  
-该项目目前处于早期版本，希望大家多多提意见和建议。 
+This project is currently in its early stages,  looking forward to your comments and suggestions.  
+该项目目前处于早期版本，期待你的意见和建议。   
 
 Sometime, you need choose different method.  
 有时，你需要选择不同的处理方式。  
