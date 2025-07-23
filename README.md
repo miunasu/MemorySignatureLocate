@@ -11,6 +11,9 @@ It is recommended to locate the signature of shellcode.
 1. Added bidirectional scanning function/增加双向扫描功能
 2. Improved locate logic/改进定位逻辑
 
+## 2025.7.23
+Improved locate performance in PE file/改进在PE文件中的定位表现
+
 # Config
 The injection module of this project comes from my friend's [Memccl](https://github.com/Adnnlnistrator/Memccl), so inject.py needs to be in the same directory as Signature_Locate.py.  
 该项目注入模块来自朋友的[Memccl](https://github.com/Adnnlnistrator/Memccl)，因此inject.py需要和Signature_Locate.py处于同一目录。  
@@ -23,8 +26,12 @@ Choose signature and padding method.
 
 You can turn off the function you don't need by set it's False.  
 你可以通过将不需要的功能设置为 False 来关闭它。  
-multiple scan has both forward scan and backward scan, But it will increase the scanning time。Poor performance when handling PE files.  
-多重扫描可以同时向前和向后扫描，它会增加扫描时间。在处理PE文件的时候表现不佳。  
+
+multiple scan has both forward scan and backward scan, But it will increase the scanning time。When multi-scan is turned off, only forward scanning is performed.   
+多重扫描可以同时向前和向后扫描，它会增加扫描时间。关闭多重扫描后，仅会进行向前扫描。  
+This tool has poor performance when handling PE files, but backward scan better than forward scan.  
+该工具在处理PE文件的时候表现不佳，但是向后扫描比向前扫描表现更好。  
+
 precise locate single signature means when detect single signature, start precise locate.  
 单特征码精准定位可以在检测到单特征码的时候进行精准定位。  
 
@@ -65,12 +72,11 @@ In some special cases, the tool cannot correctly locate the signature.
 This project is currently in its early stages,  looking forward to your comments and suggestions.  
 该项目目前处于早期版本，期待你的意见和建议。   
 
-Sometime, you need choose different method.  
-有时，你需要选择不同的处理方式。  
+Sometime, you need choose different method by modify config:signature_handle_method or config:padding_method.  
+有时，你需要通过修改config:signature_handle_method或config:padding_method来选择不同的处理方式。 
 
 
-
-# Example
+# Shellcode Example
 Use MSF to generate shellcode for bidirectional scanning testing.  
 使用MSF生成shellcode进行双向扫描测试。  
 > CONFIG  
@@ -78,6 +84,9 @@ Use MSF to generate shellcode for bidirectional scanning testing.
 > precise_locate_single_signature = True  # when detect single signature, start precise locate  
 > signature_handle_method = "ZERO" # ZERO OR XOR  
 > padding_method = "XOR" # ZERO OR XOR   
+> SIGNATURE_CHUNCK = 40  
+> STEP = 2  
+> INJECT_NUM = 15  
 ```
 C:\Users\miunasu\Desktop>python Signature_Locate.py shellcode.bin.enc
 --------------------------------------------
@@ -126,4 +135,54 @@ Backward signature locate finished, result:
 Shellcode written to output_forward_scan_shellcode.enc, decryption key: 0x43
 Forward signature locate finished, result:
 [[44, 64], [332, 334], [372, 374], [408, 410], [434, 436], [472, 474]]
+```  
+
+# PE file Example
+Use black dll for bidirectional scanning testing.  
+使用黑dll进行双向扫描测试。  
+> CONFIG  
+> multiple_scan = True # both forward scan and backward scan  
+> precise_locate_single_signature = True  # when detect single signature, start precise locate  
+> signature_handle_method = "ZERO" # ZERO OR XOR  
+> padding_method = "XOR" # ZERO OR XOR   
+> SIGNATURE_CHUNCK = 240  
+> STEP = 8  
+> INJECT_NUM = 35  
 ```
+C:\Users\miunasu\Desktop>python Signature_Locate.py NTR_loader.dll.enc
+This is PE file
+--------------------------------------------
+backward iterate process, start position: 0x400, end position: 0x21200
+chunk size: 0xf07, pos: 0x40b, pre_pos: 0x1312
+
+--------------------------------------------
+forward iterate process, start position: 0x0, end position: 0x21200
+chunk size: 0xf24, pre_pos: 0x1d55c, pos: 0x1e480
+
+--------------------------------------------
+find signature in forward scan, ZERO range start: 0x1de24, end: 0x1de2c
+--------------------------------------------
+find signature in backward scan, ZERO range start: 0xaf2, end: 0xafa
+
+
+--------------------------------------------
+forward iterate process, start position: 0x0, end position: 0x21200
+chunk size: 0xf24, pre_pos: 0x1d55c, pos: 0x1e480
+
+This range has been processed in forward scan, start: 0x1de24, end: 0x1de2c, try other signature or padding handle method
+--------------------------------------------
+Shellcode written to output_backward_scan_shellcode.enc, decryption key: 0x43
+Backward signature locate finished, result:
+[['0xaf2', '0xafa']]
+--------------------------------------------
+Signature forward scan failed, try other signature or padding handle method.  The last range has some problem:
+[['0x1de24', '0x1de2c']]
+```
+
+In this case, forward scan failed, the locator repeated positioning of an area that has been zeroed.  
+Backward scan sucessed, modify the signature area, bypass Kaspersky.  
+在这种情况下，向前扫描失败了，定位器重复标记了一片已被置零的区域。  
+向后扫描成功了，修改特征区域，成功内存免杀卡巴斯基。  
+
+# Other
+If you have any question, please open an issue on GitHub.  
