@@ -64,18 +64,6 @@ Bidirectional scanning will provide separate results and file. The final signatu
 Encrypt the memory anti-virus code and output it to output_shellcode.bin, and decrypt it using enc.py.  
 将内存免杀的代码加密并输出到output_shellcode.bin，使用enc.py解密。  
 
-# Other
-The larger the target is, the more time it takes.  
-免杀目标越大，消耗的时间越多。  
-In some special cases, the tool cannot correctly locate the signature.  
-在个别特殊情况，工具无法正确定位特征码。    
-This project is currently in its early stages,  looking forward to your comments and suggestions.  
-该项目目前处于早期版本，期待你的意见和建议。   
-
-Sometime, you need choose different method by modify config:signature_handle_method or config:padding_method.  
-有时，你需要通过修改config:signature_handle_method或config:padding_method来选择不同的处理方式。 
-
-
 # Shellcode Example
 Use MSF to generate shellcode for bidirectional scanning testing.  
 使用MSF生成shellcode进行双向扫描测试。  
@@ -185,4 +173,15 @@ Backward scan sucessed, modify the signature area, bypass Kaspersky.
 向后扫描成功了，修改特征区域，成功内存免杀卡巴斯基。  
 
 # Other
-If you have any question, please open an issue on GitHub.  
+The larger the target is, the more time it takes.  
+免杀目标越大，消耗的时间越多。  
+In some special cases, the tool cannot correctly locate the signature.  
+在个别特殊情况，工具无法正确定位特征码。    
+This project is currently in its early stages,  looking forward to your comments and suggestions.  
+该项目目前处于早期版本，期待你的意见和建议。   
+
+Sometime, you need choose different method by modify config:signature_handle_method or config:padding_method.  
+有时，你需要通过修改config:signature_handle_method或config:padding_method来选择不同的处理方式。 
+If you have any question, please open an issue on GitHub.   
+如果你有任何疑问，请提交issue。  
+ 
