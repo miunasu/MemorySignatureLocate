@@ -163,7 +163,8 @@ Shellcode written to output_backward_scan_shellcode.enc, decryption key: 0x43
 Backward signature locate finished, result:
 [['0xaf2', '0xafa']]
 --------------------------------------------
-Signature forward scan failed, try other signature or padding handle method.  The last range has some problem:
+Signature forward scan failed, try other signature or padding handle method.  
+The last range has some problem:  
 [['0x1de24', '0x1de2c']]
 ```
 
@@ -173,6 +174,7 @@ Backward scan sucessed, modify the signature area, bypass Kaspersky.
 向后扫描成功了，修改特征区域，成功内存免杀卡巴斯基。  
 
 # Other
+
 The larger the target is, the more time it takes.  
 免杀目标越大，消耗的时间越多。  
 In some special cases, the tool cannot correctly locate the signature.  
@@ -181,7 +183,7 @@ This project is currently in its early stages,  looking forward to your comments
 该项目目前处于早期版本，期待你的意见和建议。   
 
 Sometime, you need choose different method by modify config:signature_handle_method or config:padding_method.  
-有时，你需要通过修改config:signature_handle_method或config:padding_method来选择不同的处理方式。 
+有时，你需要通过修改config:signature_handle_method或config:padding_method来选择不同的处理方式。  
 If you have any question, please open an issue on GitHub.   
 如果你有任何疑问，请提交issue。  
  
